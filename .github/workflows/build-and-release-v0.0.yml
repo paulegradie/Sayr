@@ -1,0 +1,190 @@
+name: Build and Release v0.0
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "**/.gitignore"
+      - "docs/**"
+      - "*.md"
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "**/*.md"
+      - "**/.gitignore"
+      - "docs/**"
+      - "*.md"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  SOLUTION_FILE: "Sayr.sln"
+
+jobs:
+  set_version:
+    name: Set Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.full_version }}
+      version_prefix: ${{ steps.extract_version.outputs.version_prefix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from workflow filename
+        id: extract_version
+        run: |
+          WORKFLOW_FILENAME="${GITHUB_WORKFLOW}.yml"
+          VERSION_PREFIX=$(echo "$WORKFLOW_FILENAME" | sed -n 's/.*v\([0-9]\+\.[0-9]\+\)\.yml.*/\1/p')
+
+          if [ -z "$VERSION_PREFIX" ]; then
+            VERSION_PREFIX=$(echo "$GITHUB_WORKFLOW" | sed -n 's/.*v\([0-9]\+\.[0-9]\+\).*/\1/p')
+          fi
+
+          if [ -z "$VERSION_PREFIX" ]; then
+            echo "Error: Could not extract version from workflow name: $GITHUB_WORKFLOW"
+            echo "Workflow filename attempted: $WORKFLOW_FILENAME"
+            exit 1
+          fi
+
+          BUILD_NUMBER=${{ github.run_number }}
+          FULL_VERSION="$VERSION_PREFIX.$BUILD_NUMBER"
+
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            FULL_VERSION="$FULL_VERSION-pull-request"
+          fi
+
+          echo "version_prefix=$VERSION_PREFIX" >> $GITHUB_OUTPUT
+          echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $FULL_VERSION"
+          echo "Version prefix extracted: $VERSION_PREFIX"
+
+          echo "Workflow name: $GITHUB_WORKFLOW"
+          echo "Workflow filename: $WORKFLOW_FILENAME"
+          echo "Version prefix: $VERSION_PREFIX"
+
+  build_solution:
+    name: Build Solution
+    needs: set_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore Dependencies
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Build Solution
+        run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:Version=${{ needs.set_version.outputs.version }}
+
+  build_tray_windows:
+    name: Build Tray - Windows
+    needs: [set_version, build_solution]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish Tray (Windows x64)
+        run: |
+          dotnet publish apps/Sayr.Tray/Sayr.Tray.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:PublishTrimmed=false `
+            -p:DebugType=none `
+            -p:Version=${{ needs.set_version.outputs.version }} `
+            --output ./publish/win-x64
+
+      - name: Create Windows Archive (Portable)
+        run: |
+          Compress-Archive -Path ./publish/win-x64/* -DestinationPath Sayr-Portable-v${{ needs.set_version.outputs.version }}-win-x64.zip
+
+      - name: Upload Windows Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-windows-x64
+          path: Sayr-Portable-v${{ needs.set_version.outputs.version }}-win-x64.zip
+          retention-days: 1
+
+  create_release:
+    name: Create GitHub Release
+    needs: [set_version, build_tray_windows]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts/
+
+      - name: Display Artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          find ./artifacts -type f
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          VERSION="${{ needs.set_version.outputs.version }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --no-merges)
+          else
+            COMMITS=$(git log -10 --oneline --no-merges)
+          fi
+
+          cat > release_notes.md << 'EOFNOTES'
+          ## Sayr v${{ needs.set_version.outputs.version }}
+
+          **Local Windows dictation using a hotkey and a local speech-to-text backend**
+
+          ### Downloads
+          - **Windows Portable**: `Sayr-Portable-v${{ needs.set_version.outputs.version }}-win-x64.zip`
+
+          ### What's Changed
+
+          EOFNOTES
+
+          echo "$COMMITS" >> release_notes.md
+
+          if [ -n "$LAST_TAG" ]; then
+            echo "" >> release_notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...v${VERSION}" >> release_notes.md
+          fi
+
+          echo "Release notes:"
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.set_version.outputs.version }}
+          name: Sayr v${{ needs.set_version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            ./artifacts/tray-windows-x64/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

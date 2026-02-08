@@ -1,0 +1,6 @@
+infra/localai/models/
+infra/localai/data/
+**/bin/
+**/obj/
+.vs/
+*.csproj.user

@@ -1,0 +1,13 @@
+services:
+  localai:
+    image: localai/localai:latest
+    container_name: justsayit-localai
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+      - ./data:/data
+    environment:
+      - MODELS_PATH=/models
+      - DATA_DIR=/data
+    restart: unless-stopped
