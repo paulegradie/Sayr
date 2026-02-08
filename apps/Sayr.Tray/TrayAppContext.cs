@@ -50,7 +50,7 @@ internal sealed class TrayAppContext : ApplicationContext
             if (!_recorder.IsRecording)
             {
                 _recorder.Start();
-                UpdateTray("Recording... (Alt+Space)", "Stop recording");
+                UpdateTray("Recording... (Alt+Y)", "Stop recording");
                 return;
             }
 

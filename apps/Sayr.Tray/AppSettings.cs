@@ -6,7 +6,7 @@ internal sealed class AppSettings
 {
     public string BackendUrl { get; set; } = "http://localhost:8080";
     public string Model { get; set; } = "whisper-1";
-    public string Hotkey { get; set; } = "Alt+Space";
+    public string Hotkey { get; set; } = "Alt+Y";
 
     public static AppSettings Load(string path)
     {

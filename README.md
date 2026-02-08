@@ -4,7 +4,7 @@ Local Windows dictation using a hotkey and a local speech-to-text backend.
 
 ## What This Repo Gives You
 1. A minimal Windows tray app that:
-   - Registers `Alt+Space` as a global hotkey.
+   - Registers `Alt+Y` as a global hotkey.
    - Records audio while toggled on.
    - Sends audio to a local transcription backend.
    - Pastes the transcription into the focused window.
@@ -21,7 +21,7 @@ Local Windows dictation using a hotkey and a local speech-to-text backend.
    dotnet build .\Sayr.sln
    .\apps\Sayr.Tray\bin\Debug\net8.0-windows\Sayr.Tray.exe
    ```
-3. Focus any text field, hit `Alt+Space`, speak, then hit `Alt+Space` again.
+3. Focus any text field, hit `Alt+Y`, speak, then hit `Alt+Y` again.
 
 ## Configuration
 The tray app reads settings from `apps/Sayr.Tray/appsettings.json`:
@@ -29,7 +29,7 @@ The tray app reads settings from `apps/Sayr.Tray/appsettings.json`:
 {
   "BackendUrl": "http://localhost:8080",
   "Model": "whisper-1",
-  "Hotkey": "Alt+Space"
+  "Hotkey": "Alt+Y"
 }
 ```
 
