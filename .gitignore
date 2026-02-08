@@ -2,5 +2,17 @@ infra/localai/models/
 infra/localai/data/
 **/bin/
 **/obj/
+**/publish/
 .vs/
 *.csproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+TestResults/
+BenchmarkDotNet.Artifacts/
+packages/
+*.nupkg
+*.snupkg
+artifacts/
+.dotnet/
