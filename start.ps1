@@ -68,26 +68,37 @@ function Ensure-ModelInstalled {
     throw "Model install timed out."
 }
 
-Write-Host "Starting LocalAI..."
-Push-Location "infra/localai"
-docker compose up -d
-Pop-Location
+try {
+    Write-Host "Starting LocalAI..."
+    Push-Location "infra/localai"
+    docker compose up -d
+    Pop-Location
 
-Write-Host "Waiting for LocalAI to be ready..."
-Wait-HttpReady -Url "$localAiUrl/v1/models"
+    Write-Host "Waiting for LocalAI to be ready..."
+    Wait-HttpReady -Url "$localAiUrl/v1/models"
 
-Write-Host "Ensuring model is installed..."
-Ensure-ModelInstalled -BaseUrl $localAiUrl -Id $modelName -Url $modelUrl
+    Write-Host "Ensuring model is installed..."
+    Ensure-ModelInstalled -BaseUrl $localAiUrl -Id $modelName -Url $modelUrl
 
-Write-Host "Publishing Sayr tray app..."
-dotnet publish "apps/Sayr.Tray/Sayr.Tray.csproj" `
-  --configuration Release `
-  --runtime win-x64 `
-  --self-contained true `
-  -p:PublishSingleFile=true `
-  -p:PublishTrimmed=false `
-  -p:DebugType=none `
-  --output ".\publish\win-x64"
+    Write-Host "Publishing Sayr tray app..."
+    Write-Host "Stopping any running Sayr tray app..."
+    Get-Process -Name "Sayr.Tray" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 250
+    dotnet publish "apps/Sayr.Tray/Sayr.Tray.csproj" `
+      --configuration Release `
+      --runtime win-x64 `
+      --self-contained true `
+      -p:PublishSingleFile=true `
+      -p:PublishTrimmed=false `
+      -p:DebugType=none `
+      --output ".\publish\win-x64"
 
-Write-Host "Launching Sayr..."
-Start-Process ".\publish\win-x64\Sayr.Tray.exe"
+    Write-Host "Launching Sayr..."
+    Start-Process ".\publish\win-x64\Sayr.Tray.exe"
+    exit 0
+}
+catch {
+    Write-Host "Start failed: $($_.Exception.Message)"
+    Read-Host "Press Enter to close"
+    exit 1
+}
